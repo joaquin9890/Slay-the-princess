@@ -1,0 +1,499 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slay the Princess</title>
+    <style>
+        body {
+            font-family: 'Times New Roman', serif;
+            background-image: url('https://static.wikia.nocookie.net/slay-the-princess/images/1/19/Bg_path_p.png/revision/latest?cb=20240101200720');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            color: #f0f0f0;
+            margin: 20px;
+            padding: 20px;
+            max-width: 800px;
+            margin: auto;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+        h1 {
+            color: #b22222;
+            text-align: center;
+            text-shadow: 2px 2px 4px #000;
+        }
+        h2 {
+            color: #ff4500;
+            text-shadow: 1px 1px 2px #000;
+        }
+        img {
+            display: block;
+            margin: auto;
+            max-width: 100%;
+            border-radius: 5px;
+            border: 2px solid #888;
+        }
+        p {
+            line-height: 1.6;
+            text-shadow: 1px 1px 2px #000;
+        }
+        a {
+            color: #00bfff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .minigame {
+            background-color: rgba(51, 51, 51, 0.8);
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            margin-bottom: 20px;
+            border: 1px solid #666;
+        }
+        button {
+            background-color: #b22222;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 5px;
+            text-shadow: 1px 1px 1px #000;
+        }
+        button:hover {
+            background-color: #8b1a1a;
+        }
+        #resultado1, #story, #choices, #resultado2, #memory-result {
+            margin-top: 10px;
+            font-style: italic;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #memory-game {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+        .card {
+            width: 60px;
+            height: 60px;
+            background-color: #666;
+            border: 2px solid #888;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        .card.flipped {
+            background-color: #b22222;
+        }
+        .card.matched {
+            background-color: #00bfff;
+            cursor: default;
+        }
+        #start-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 1s ease-out;
+        }
+        #start-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #start-screen h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+        #start-screen p {
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+        #start-screen button {
+            font-size: 24px;
+            padding: 15px 30px;
+        }
+        #main-content {
+            transition: opacity 1s ease-in;
+        }
+        #main-content.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="start-screen">
+        <h1>Slay the Princess</h1>
+        <p>Una voz susurra: "¿Matarás a la Princesa, o el mundo perecerá?"</p>
+        <button onclick="startExperience()">Entrar en el Bosque</button>
+    </div>
+
+    <audio id="ambient" src="https://freesound.org/data/previews/70/70100_634166-lq.mp3" loop></audio>
+    <audio id="clickSound" src="https://freesound.org/data/previews/150/150382_2685448-lq.mp3"></audio>
+    <audio id="transformSound" src="https://freesound.org/data/previews/440/440480_9155175-lq.mp3"></audio>
+    
+    <div id="main-content" class="hidden">
+        <h1>Slay the Princess</h1>
+        <img src="https://cdn.cloudflare.steamstatic.com/steam/apps/1989270/capsule_616x353.jpg" alt="Portada de Slay the Princess">
+        
+        <h2>Descripción</h2>
+        <p>Slay the Princess es un juego de aventura de horror psicológico lanzado en 2023, desarrollado y publicado por Black Tabby Games. Es una novela visual con elementos de simulación de citas, ramificaciones dramáticas en la narrativa y arte dibujado a mano con lápiz. El jugador se encuentra en un camino en el bosque que lleva a una cabaña, donde en el sótano hay una Princesa que debe ser asesinada para evitar el fin del mundo. La Princesa intentará encantarte, mentirte y prometerte el mundo para detenerte.</p>
+        
+        <h2>Características</h2>
+        <ul>
+            <li>Totalmente voz actuada por Jonathan Sims y Nichole Goodnight.</li>
+            <li>Arte dibujado a mano por la novelista gráfica Abby Howard.</li>
+            <li>Narrativa ramificada que se basa en tus elecciones y creencias.</li>
+            <li>Elementos de horror, bucles temporales y giros mentales.</li>
+        </ul>
+        
+        <h2>Versión Pristine Cut</h2>
+        <p>La versión Pristine Cut incluye 3 capítulos nuevos, expansiones en rutas existentes, más del 35% de contenido adicional, un nuevo final y una galería para rastrear el progreso.</p>
+        
+        <h2>Mini-Juego 1: ¿Matar a la Princesa?</h2>
+        <div class="minigame">
+            <p>Intenta "matar" a la Princesa. Cada clic genera un resultado aleatorio inspirado en el juego.</p>
+            <button onclick="playClick(); slayAttempt()">Intenta Matarla</button>
+            <div id="resultado1"></div>
+        </div>
+        
+        <h2>Mini-Juego 2: Aventura Ramificada</h2>
+        <div class="minigame">
+            <p>Una mini-aventura con elecciones ramificadas, inspirada en las mecánicas del juego original: elecciones que cambian la narrativa, bucles y transformaciones. Ahora con más opciones y ramificaciones.</p>
+            <div id="story">Estás en el bosque, frente a una cabaña. Una voz en tu cabeza te dice: "Debes matar a la Princesa en el sótano para salvar el mundo."</div>
+            <div id="choices">
+                <button onclick="playClick(); makeChoice('enter')">Entra en la cabaña</button>
+                <button onclick="playClick(); makeChoice('explore')">Explora los alrededores</button>
+                <button onclick="playClick(); makeChoice('leave')">Ignora y vete</button>
+            </div>
+            <div id="resultado2"></div>
+            <button onclick="playClick(); resetGame()" style="display:none;" id="resetBtn">Reiniciar</button>
+        </div>
+        
+        <h2>Mini-Juego 3: Memoria del Ciclo</h2>
+        <div class="minigame">
+            <p>Encuentra los pares de símbolos que representan los ciclos de la Princesa. Inspirado en los bucles temporales del juego.</p>
+            <div id="memory-game"></div>
+            <div id="memory-result"></div>
+            <button onclick="playClick(); startMemoryGame()" style="display:none;" id="memoryResetBtn">Reiniciar</button>
+        </div>
+        
+        <h2>Enlaces</h2>
+        <p>
+            <a href="https://store.steampowered.com/app/1989270/Slay_the_Princess__The_Pristine_Cut/" target="_blank">Página en Steam</a><br>
+            <a href="https://www.slaytheprincess.com/" target="_blank">Sitio Oficial</a><br>
+            <a href="https://en.wikipedia.org/wiki/Slay_the_Princess" target="_blank">Wikipedia</a>
+        </p>
+    </div>
+
+    <script>
+        // Definir funciones en el ámbito global
+        function startExperience() {
+            const startScreen = document.getElementById('start-screen');
+            const mainContent = document.getElementById('main-content');
+            const ambientAudio = document.getElementById('ambient');
+
+            // Reproducir audio ambiental tras interacción
+            ambientAudio.play().catch(error => {
+                console.log("Error al reproducir el audio ambiental: ", error);
+            });
+            // Transición suave para ocultar la pantalla inicial
+            startScreen.classList.add('hidden');
+            // Mostrar contenido principal con transición
+            mainContent.classList.remove('hidden');
+            // Iniciar el juego de memoria
+            startMemoryGame();
+        }
+
+        function playClick() {
+            document.getElementById('clickSound').play().catch(error => {
+                console.log("Error al reproducir el sonido de clic: ", error);
+            });
+        }
+
+        function playTransform() {
+            document.getElementById('transformSound').play().catch(error => {
+                console.log("Error al reproducir el sonido de transformación: ", error);
+            });
+        }
+
+        function slayAttempt() {
+            const outcomes = [
+                "¡Éxito! Has matado a la Princesa... pero el mundo se acaba de todos modos.",
+                "Fallaste. La Princesa te engaña y ahora estás en un bucle temporal.",
+                "La Princesa se transforma y te ataca. ¡Game over!",
+                "Decides no matarla... y descubres un secreto oscuro.",
+                "¡Victoria parcial! Pero hay más rutas por explorar."
+            ];
+            const randomIndex = Math.floor(Math.random() * outcomes.length);
+            document.getElementById('resultado1').innerText = outcomes[randomIndex];
+            if (outcomes[randomIndex].includes('transforma')) {
+                playTransform();
+            }
+        }
+
+        let currentState = 'start';
+
+        function makeChoice(choice) {
+            let story = document.getElementById('story');
+            let choicesDiv = document.getElementById('choices');
+            let resultado = document.getElementById('resultado2');
+            let resetBtn = document.getElementById('resetBtn');
+
+            choicesDiv.innerHTML = '';
+            resultado.innerText = '';
+
+            if (currentState === 'start') {
+                if (choice === 'enter') {
+                    story.innerText = 'Bajas al sótano y ves a la Princesa encadenada. Ella te mira con ojos suplicantes.';
+                    choicesDiv.innerHTML = `
+                        <button onclick="playClick(); makeChoice('slay')">Mátala con el cuchillo</button>
+                        <button onclick="playClick(); makeChoice('talk')">Habla con ella</button>
+                        <button onclick="playClick(); makeChoice('free')">Libérala</button>
+                        <button onclick="playClick(); makeChoice('examine')">Examina la habitación</button>
+                    `;
+                    currentState = 'basement';
+                } else if (choice === 'explore') {
+                    story.innerText = 'Exploras los alrededores y encuentras un objeto extraño: un espejo roto que refleja múltiples versiones de ti.';
+                    choicesDiv.innerHTML = `
+                        <button onclick="playClick(); makeChoice('enter')">Ahora entra en la cabaña</button>
+                        <button onclick="playClick(); makeChoice('shatter')">Rompe el espejo completamente</button>
+                        <button onclick="playClick(); makeChoice('leave')">Vete del bosque</button>
+                    `;
+                    currentState = 'exploring';
+                } else if (choice === 'leave') {
+                    story.innerText = 'Ignoras la voz y te vas. El mundo se acaba. Fin.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                }
+            } else if (currentState === 'basement') {
+                if (choice === 'slay') {
+                    playTransform();
+                    story.innerText = 'Intentas matarla, pero ella se transforma en una bestia y te devora. Mueres... pero despiertas de nuevo en el bosque. (Bucle temporal)';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                } else if (choice === 'talk') {
+                    story.innerText = 'Hablas con ella. Te convence de que la voz miente. Ahora dudan tus creencias.';
+                    choicesDiv.innerHTML = `
+                        <button onclick="playClick(); makeChoice('believe')">Crees en ella y la liberas</button>
+                        <button onclick="playClick(); makeChoice('doubt')">Dudas y decides matarla</button>
+                        <button onclick="playClick(); makeChoice('question')">Pregúntale sobre el mundo</button>
+                    `;
+                    currentState = 'talking';
+                } else if (choice === 'free') {
+                    story.innerText = 'La liberas. Ella te agradece y el mundo cambia... ¿para bien o mal? Descubre en el juego real.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                } else if (choice === 'examine') {
+                    story.innerText = 'Examinas la habitación y encuentras inscripciones antiguas en las paredes que hablan de ciclos eternos.';
+                    choicesDiv.innerHTML = `
+                        <button onclick="playClick(); makeChoice('slay')">Ahora mátala</button>
+                        <button onclick="playClick(); makeChoice('talk')">Habla con ella sobre las inscripciones</button>
+                        <button onclick="playClick(); makeChoice('leave_basement')">Sube de nuevo</button>
+                    `;
+                    currentState = 'examining';
+                }
+            } else if (currentState === 'talking') {
+                if (choice === 'believe') {
+                    story.innerText = 'Crees en ella. Se revela un secreto: Tú eres parte del ciclo. Fin alternativo.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                } else if (choice === 'doubt') {
+                    playTransform();
+                    story.innerText = 'Dudas y la matas. Pero su forma cambia y el bucle continúa.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                } else if (choice === 'question') {
+                    story.innerText = 'Le preguntas sobre el mundo. Ella revela que todo es una ilusión creada por entidades superiores.';
+                    choicesDiv.innerHTML = `
+                        <button onclick="playClick(); makeChoice('accept')">Aceptas la verdad y te unes a ella</button>
+                        <button onclick="playClick(); makeChoice('reject')">Rechazas y luchas</button>
+                    `;
+                    currentState = 'questioning';
+                }
+            } else if (currentState === 'questioning') {
+                if (choice === 'accept') {
+                    story.innerText = 'Aceptas y te unes a ella. Juntos rompen el ciclo... o lo perpetúan. Fin ambiguo.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                } else if (choice === 'reject') {
+                    playTransform();
+                    story.innerText = 'Rechazas y luchas. Ella se transforma en múltiples formas, y mueres en el intento. Bucle reinicia.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                }
+            } else if (currentState === 'exploring') {
+                if (choice === 'enter') {
+                    story.innerText = 'Ahora entras en la cabaña, pero sientes que algo ha cambiado por el espejo.';
+                    choicesDiv.innerHTML = `
+                        <button onclick="playClick(); makeChoice('slay')">Mátala con el cuchillo</button>
+                        <button onclick="playClick(); makeChoice('talk')">Habla con ella</button>
+                        <button onclick="playClick(); makeChoice('free')">Libérala</button>
+                    `;
+                    currentState = 'basement';
+                } else if (choice === 'shatter') {
+                    story.innerText = 'Rompes el espejo. Fragmentos de realidad se rompen, y despiertas en un bucle diferente. Fin caótico.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                } else if (choice === 'leave') {
+                    story.innerText = 'Te vas, pero el espejo te persigue en sueños. El mundo persiste, pero alterado.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                }
+            } else if (currentState === 'examining') {
+                if (choice === 'slay') {
+                    playTransform();
+                    story.innerText = 'Con conocimiento de los ciclos, la matas de manera decisiva... pero el ciclo se reinicia más fuerte.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                } else if (choice === 'talk') {
+                    story.innerText = 'Hablas con ella sobre las inscripciones. Ella confirma que son profecías sobre ti.';
+                    choicesDiv.innerHTML = `
+                        <button onclick="playClick(); makeChoice('believe')">Crees y colaboras</button>
+                        <button onclick="playClick(); makeChoice('doubt')">Dudas y atacas</button>
+                    `;
+                    currentState = 'talking';
+                } else if (choice === 'leave_basement') {
+                    story.innerText = 'Subes, pero la voz en tu cabeza se hace más fuerte. Regresas al start.';
+                    resetBtn.style.display = 'block';
+                    currentState = 'end';
+                }
+            }
+        }
+
+        function resetGame() {
+            document.getElementById('story').innerText = 'Estás en el bosque, frente a una cabaña. Una voz en tu cabeza te dice: "Debes matar a la Princesa en el sótano para salvar el mundo."';
+            document.getElementById('choices').innerHTML = `
+                <button onclick="playClick(); makeChoice('enter')">Entra en la cabaña</button>
+                <button onclick="playClick(); makeChoice('explore')">Explora los alrededores</button>
+                <button onclick="playClick(); makeChoice('leave')">Ignora y vete</button>
+            `;
+            document.getElementById('resultado2').innerText = '';
+            document.getElementById('resetBtn').style.display = 'none';
+            currentState = 'start';
+        }
+
+        // Mini-Juego 3: Memoria del Ciclo
+        let cards = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+
+        function startMemoryGame() {
+            matchedPairs = 0;
+            flippedCards = [];
+            const symbols = ['👑', '👑', '🗡️', '🗡️', '🪞', '🪞', '💀', '💀'];
+            cards = symbols.sort(() => Math.random() - 0.5);
+            const gameDiv = document.getElementById('memory-game');
+            gameDiv.innerHTML = '';
+            document.getElementById('memory-result').innerText = '';
+            document.getElementById('memoryResetBtn').style.display = 'none';
+
+            cards.forEach((symbol, index) => {
+                const card = document.createElement('div');
+                card.classList.add('card');
+                card.dataset.symbol = symbol;
+                card.dataset.index = index;
+                card.addEventListener('click', () => flipCard(index));
+                gameDiv.appendChild(card);
+            });
+        }
+
+        function flipCard(index) {
+            if (flippedCards.length < 2 && !cards[index].flipped && !cards[index].matched) {
+                playClick();
+                const cardElement = document.getElementsByClassName('card')[index];
+                cardElement.classList.add('flipped');
+                cardElement.innerText = cards[index];
+                flippedCards.push(index);
+                cards[index].flipped = true;
+
+                if (flippedCards.length === 2) {
+                    setTimeout(checkMatch, 1000);
+                }
+            }
+        }
+
+        function checkMatch() {
+            const [first, second] = flippedCards;
+            const firstCard = document.getElementsByClassName('card')[first];
+            const secondCard = document.getElementsByClassName('card')[second];
+
+            if (cards[first] === cards[second]) {
+                firstCard.classList.add('matched');
+                secondCard.classList.add('matched');
+                cards[first].matched = true;
+                cards[second].matched = true;
+                matchedPairs++;
+                if (matchedPairs === cards.length / 2) {
+                    document.getElementById('memory-result').innerText = '¡Has descifrado los ciclos! El conocimiento te acerca a la verdad.';
+                    document.getElementById('memoryResetBtn').style.display = 'block';
+                }
+            } else {
+                firstCard.classList.remove('flipped');
+                secondCard.classList.remove('flipped');
+                firstCard.innerText = '';
+                secondCard.innerText = '';
+                cards[first].flipped = false;
+                cards[second].flipped = false;
+            }
+            flippedCards = [];
+        }
+    </script>
+</body>
+</html>
